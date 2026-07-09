@@ -1,6 +1,32 @@
-export const dynamic="force-dynamic";
-export async function GET(){
-  const r=await fetch("https://economia.awesomeapi.com.br/json/last/USD-BRL",{cache:"no-store"});
-  const j=await r.json(); const q=j.USDBRL;
-  return Response.json({bid:+q.bid*1000,high:+q.high*1000,low:+q.low*1000,pct:+q.pctChange,ts:+q.timestamp*1000});
+export const dynamic = "force-dynamic";
+const OPT = { headers: { "User-Agent": "Mozilla/5.0 (compatible; TerminalWDO/1.0)" }, cache: "no-store" };
+
+async function awesome() {
+  const r = await fetch("https://economia.awesomeapi.com.br/json/last/USD-BRL", OPT);
+  if (!r.ok) throw new Error("awesomeapi " + r.status);
+  const q = (await r.json()).USDBRL;
+  if (!q || !q.bid) throw new Error("awesomeapi sem dados");
+  return { bid: +q.bid * 1000, high: +q.high * 1000, low: +q.low * 1000, pct: +q.pctChange, ts: +q.timestamp * 1000, src: "awesomeapi" };
+}
+
+async function yahoo() {
+  const r = await fetch("https://query1.finance.yahoo.com/v8/finance/chart/BRL=X?interval=1m&range=1d", OPT);
+  if (!r.ok) throw new Error("yahoo " + r.status);
+  const res = (await r.json()).chart?.result?.[0];
+  if (!res) throw new Error("yahoo sem dados");
+  const m = res.meta, q = res.indicators.quote[0];
+  const closes = (q.close || []).filter(x => x != null);
+  const highs = (q.high || []).filter(x => x != null);
+  const lows = (q.low || []).filter(x => x != null);
+  const bid = (m.regularMarketPrice ?? closes[closes.length - 1]) * 1000;
+  const prev = (m.chartPreviousClose || 0) * 1000;
+  return { bid, high: (highs.length ? Math.max(...highs) : bid / 1000) * 1000, low: (lows.length ? Math.min(...lows) : bid / 1000) * 1000, pct: prev ? (bid - prev) / prev * 100 : 0, ts: Date.now(), src: "yahoo" };
+}
+
+export async function GET() {
+  try { return Response.json(await awesome()) }
+  catch (e1) {
+    try { return Response.json(await yahoo()) }
+    catch (e2) { return Response.json({ error: `${e1.message} | ${e2.message}` }, { status: 502 }) }
+  }
 }
