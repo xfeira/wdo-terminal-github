@@ -1,4 +1,5 @@
-:root{
+
+  :root{
     --bg:#0B1220; --panel:#101A2E; --panel2:#0D1626; --line:#1D2B45;
     --ink:#D7E0F0; --dim:#7C8AA5; --amber:#F5B942; --amber-dim:#8A6A2A;
     --up:#2FBF71; --down:#E5484D; --neutral:#8A93A6;
@@ -29,12 +30,17 @@
     #px{font-size:24px}
     .brand{font-size:10px}
     .jtable{display:block;overflow-x:auto;white-space:nowrap}
+    .cwrap-lg{height:230px} .cwrap-sm{height:85px}
+    .inputs input,.inputs select,.jform input,.jform select{font-size:16px}
   }
   .panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px;min-width:0;overflow:hidden}
   .panel h2{font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--dim);text-transform:uppercase;
     margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
   .panel h2 .tag{color:var(--amber)}
   canvas{width:100%;max-width:100%;display:block}
+  .cwrap{position:relative;width:100%;overflow:hidden}
+  .cwrap-lg{height:320px} .cwrap-sm{height:110px}
+  .cwrap canvas{position:absolute;inset:0;width:100%;height:100%}
   .col{display:flex;flex-direction:column;gap:10px;min-width:0}
   /* ---------- gauge ---------- */
   .score-wrap{text-align:center;padding:6px 0 2px}
