@@ -223,7 +223,7 @@ export default function Terminal() {
   const draw = useCallback(() => {
     if (!ready) return;
     const N = Math.min(candles.length, 80), cs = candles.slice(-N);
-    const setup = cv => { const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = +cv.getAttribute("height"); cv.width = w * dpr; cv.height = h * dpr; cv.style.height = h + "px"; const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); return { g, w, h } };
+    const setup = cv => { const dpr = window.devicePixelRatio || 1, w = cv.clientWidth || 300; let h = +cv.getAttribute("height"); if (typeof window !== "undefined" && window.innerWidth < 700) h = Math.round(h * 0.72); cv.width = w * dpr; cv.height = h * dpr; cv.style.width = w + "px"; cv.style.height = h + "px"; const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); return { g, w, h } };
     { const cv = chartR.current; if (cv) {
       const { g, w, h } = setup(cv);
       const pad = { l: 6, r: 52, t: 8, b: 8 };
