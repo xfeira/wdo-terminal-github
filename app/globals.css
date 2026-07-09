@@ -1,5 +1,4 @@
-
-  :root{
+:root{
     --bg:#0B1220; --panel:#101A2E; --panel2:#0D1626; --line:#1D2B45;
     --ink:#D7E0F0; --dim:#7C8AA5; --amber:#F5B942; --amber-dim:#8A6A2A;
     --up:#2FBF71; --down:#E5484D; --neutral:#8A93A6;
@@ -7,6 +6,7 @@
     --sans:"Segoe UI",system-ui,-apple-system,sans-serif;
   }
   *{box-sizing:border-box;margin:0;padding:0}
+  html,body{overflow-x:hidden;max-width:100%}
   body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:13px;min-height:100vh}
   /* ---------- top bar ---------- */
   header{display:flex;align-items:center;gap:18px;padding:10px 16px;border-bottom:1px solid var(--line);
@@ -23,13 +23,19 @@
   .spacer{flex:1}
   /* ---------- layout ---------- */
   main{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(300px,1fr);gap:10px;padding:10px 16px 30px;max-width:1500px;margin:0 auto}
-  @media(max-width:980px){main{grid-template-columns:1fr}}
-  .panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px}
+  @media(max-width:980px){
+    main{grid-template-columns:1fr;padding:8px 8px 24px}
+    header{position:static;padding:8px 10px;gap:10px}
+    #px{font-size:24px}
+    .brand{font-size:10px}
+    .jtable{display:block;overflow-x:auto;white-space:nowrap}
+  }
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px;min-width:0;overflow:hidden}
   .panel h2{font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--dim);text-transform:uppercase;
     margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
   .panel h2 .tag{color:var(--amber)}
-  canvas{width:100%;display:block}
-  .col{display:flex;flex-direction:column;gap:10px}
+  canvas{width:100%;max-width:100%;display:block}
+  .col{display:flex;flex-direction:column;gap:10px;min-width:0}
   /* ---------- gauge ---------- */
   .score-wrap{text-align:center;padding:6px 0 2px}
   #scoreNum{font-family:var(--mono);font-size:44px;font-weight:700;line-height:1}
