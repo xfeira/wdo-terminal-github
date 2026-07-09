@@ -223,9 +223,18 @@ export default function Terminal() {
   const draw = useCallback(() => {
     if (!ready) return;
     const N = Math.min(candles.length, 80), cs = candles.slice(-N);
-    const setup = cv => { const dpr = window.devicePixelRatio || 1, w = cv.clientWidth || 300; let h = +cv.getAttribute("height"); if (typeof window !== "undefined" && window.innerWidth < 700) h = Math.round(h * 0.72); cv.width = w * dpr; cv.height = h * dpr; cv.style.width = w + "px"; cv.style.height = h + "px"; const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); return { g, w, h } };
-    { const cv = chartR.current; if (cv) {
-      const { g, w, h } = setup(cv);
+    const setup = cv => {
+      if (!cv || !cv.parentElement) return null;
+      const box = cv.parentElement.getBoundingClientRect();
+      const w = Math.floor(box.width), h = Math.floor(box.height);
+      if (w < 40 || h < 40) return null;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      cv.width = w * dpr; cv.height = h * dpr;
+      const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      return { g, w, h };
+    };
+    { const cv = chartR.current; const S = cv && setup(cv); if (S) {
+      const { g, w, h } = S;
       const pad = { l: 6, r: 52, t: 8, b: 8 };
       const lo = Math.min(...cs.map(x => x.l), ...ind.bb.dn.slice(-N)), hiV = Math.max(...cs.map(x => x.h), ...ind.bb.up.slice(-N));
       const X = i => pad.l + (w - pad.l - pad.r) * (i + .5) / N, Y = v => pad.t + (h - pad.t - pad.b) * (1 - (v - lo) / (hiV - lo || 1));
@@ -239,8 +248,8 @@ export default function Terminal() {
       cs.forEach((cd, i) => { const up = cd.c >= cd.o; g.strokeStyle = g.fillStyle = up ? "#2FBF71" : "#E5484D"; g.beginPath(); g.moveTo(X(i), Y(cd.h)); g.lineTo(X(i), Y(cd.l)); g.stroke(); g.fillRect(X(i) - cw / 2, Y(Math.max(cd.o, cd.c)), cw, Math.max(1, Math.abs(Y(cd.o) - Y(cd.c)))) });
       [["e9", "#F5B942"], ["e21", "#7AA2F7"], ["e50", "#B48EAD"]].forEach(([k, c]) => { g.strokeStyle = c; g.lineWidth = 1.4; g.beginPath(); ind[k].slice(-N).forEach((v, i) => i ? g.lineTo(X(i), Y(v)) : g.moveTo(X(i), Y(v))); g.stroke(); g.lineWidth = 1 });
     }}
-    { const cv = macdR.current; if (cv) {
-      const { g, w, h } = setup(cv);
+    { const cv = macdR.current; const S = cv && setup(cv); if (S) {
+      const { g, w, h } = S;
       const hist = ind.mac.hist.slice(-N), m = ind.mac.m.slice(-N), s = ind.mac.sig.slice(-N);
       const mx = Math.max(...hist.map(Math.abs), ...m.map(Math.abs), ...s.map(Math.abs), .1);
       const X = i => 4 + (w - 8) * (i + .5) / N, Y = v => h / 2 - (v / mx) * (h / 2 - 8);
@@ -249,8 +258,8 @@ export default function Terminal() {
       hist.forEach((v, i) => { g.fillStyle = v >= 0 ? "rgba(47,191,113,.7)" : "rgba(229,72,77,.7)"; g.fillRect(X(i) - bw / 2, Math.min(Y(0), Y(v)), bw, Math.abs(Y(v) - Y(0))) });
       [[m, "#F5B942"], [s, "#7AA2F7"]].forEach(([a, c]) => { g.strokeStyle = c; g.beginPath(); a.forEach((v, i) => i ? g.lineTo(X(i), Y(v)) : g.moveTo(X(i), Y(v))); g.stroke() });
     }}
-    { const cv = rsiR.current; if (cv) {
-      const { g, w, h } = setup(cv);
+    { const cv = rsiR.current; const S = cv && setup(cv); if (S) {
+      const { g, w, h } = S;
       const r = ind.r.slice(-N);
       const X = i => 4 + (w - 8) * (i + .5) / N, Y = v => h - (v / 100) * (h - 10) - 5;
       g.clearRect(0, 0, w, h);
@@ -291,12 +300,12 @@ export default function Terminal() {
       <div className="col">
         <section className="panel">
           <h2>Gráfico 5 min <span className="tag">{ready ? `O ${fmt(candles[i].o)} H ${fmt(candles[i].h)} L ${fmt(candles[i].l)} C ${fmt(candles[i].c)}` : "carregando…"}</span></h2>
-          <canvas ref={chartR} height="340" />
+          <div className="cwrap cwrap-lg"><canvas ref={chartR} /></div>
         </section>
-        <section className="panel"><h2>MACD (12,26,9)</h2><canvas ref={macdR} height="110" /></section>
+        <section className="panel"><h2>MACD (12,26,9)</h2><div className="cwrap cwrap-sm"><canvas ref={macdR} /></div></section>
         <section className="panel">
           <h2>RSI 14 <span className="tag">{ready ? ind.r[i].toFixed(0) + (ind.r[i] > 70 ? " sobrecomprado" : ind.r[i] < 30 ? " sobrevendido" : "") : "—"}</span></h2>
-          <canvas ref={rsiR} height="110" />
+          <div className="cwrap cwrap-sm"><canvas ref={rsiR} /></div>
         </section>
         <section className="panel">
           <h2>Diário de trades <span className="tag">{journal.length} trades · nuvem</span></h2>
