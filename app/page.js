@@ -389,12 +389,12 @@ export default function Terminal() {
             <button onClick={submitJ} disabled={jSaving}>{jSaving ? "⏳ Salvando…" : "Registrar"}</button>
           </div>
           {jMsg && <div style={{ marginTop: 8, fontFamily: "var(--mono)", fontSize: 12, color: jMsg.startsWith("✅") ? "var(--up)" : jMsg.startsWith("❌") ? "var(--down)" : "var(--amber)" }}>{jMsg}</div>}
-          <table className="jtable"><thead><tr><th>Data</th><th>Dir</th><th>Qtd</th><th>Entrada</th><th>Saída</th><th>Pts</th><th>R$</th><th>R</th><th>Aval.</th><th>Setup</th><th></th></tr></thead>
+          <table className="jtable"><thead><tr><th>Data</th><th>Dir</th><th>Qtd</th><th>Entrada</th><th>Stop</th><th>Saída</th><th>Pts</th><th>R$</th><th>R</th><th>Aval.</th><th>Setup</th><th></th></tr></thead>
             <tbody>{journal.slice(-12).reverse().map(t => (
               <tr key={t.id}>
                 <td>{new Date(t.created_at).toLocaleString("pt-BR", { timeZone: TZ, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</td>
                 <td className={t.dir === "C" ? "pos" : "neg"}>{t.dir}</td><td>{t.qty}</td>
-                <td>{fmt(+t.entry)}</td><td>{fmt(+t.exit)}</td>
+                <td>{fmt(+t.entry)}</td><td style={{ color: "var(--dim)" }}>{t.stop ? fmt(+t.stop) : "—"}</td><td>{fmt(+t.exit)}</td>
                 <td className={+t.pts >= 0 ? "pos" : "neg"}>{+t.pts > 0 ? "+" : ""}{fmt(+t.pts)}</td>
                 <td className={+t.brl >= 0 ? "pos" : "neg"}>{fmt$(+t.brl)}</td>
                 <td>{(+t.r).toFixed(2)}</td>
