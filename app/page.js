@@ -6,6 +6,15 @@ const PT_VAL = 10, TICK = 0.5, POLL_MS = 30000, SERIES_MS = 60000, CANDLE_MIN = 
 const fmt = n => n == null || isNaN(n) ? "—" : n.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const fmt$ = n => n == null || isNaN(n) ? "—" : n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const roundTick = p => Math.round(p / TICK) * TICK;
+const TZ = "America/Sao_Paulo";
+const brDay = d => new Date(d).toLocaleDateString("pt-BR", { timeZone: TZ });
+const isMarketOpen = () => {
+  const parts = new Intl.DateTimeFormat("pt-BR", { timeZone: TZ, hour12: false, weekday: "short", hour: "numeric", minute: "numeric" }).formatToParts(new Date());
+  const get = t => parts.find(x => x.type === t)?.value || "";
+  if (/s[áa]b|dom/i.test(get("weekday"))) return false;
+  const mins = (+get("hour")) * 60 + (+get("minute"));
+  return mins >= 9 * 60 && mins <= 18 * 60 + 25; // pregão WDO: 9h às 18h25 (Brasília)
+};
 const ls = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d } catch { return d } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} }
@@ -26,15 +35,44 @@ export default function Terminal() {
   const [macroBusy, setMacroBusy] = useState(false);
   const [journal, setJournal] = useState([]);
   const [jf, setJf] = useState({ dir: "C", qty: 1, entry: "", stop: "", exit: "", setup: "" });
+  const [jSaving, setJSaving] = useState(false);
+  const [jMsg, setJMsg] = useState("");
+  const flash = (m, ms = 4000) => { setJMsg(m); setTimeout(() => setJMsg(""), ms) };
   const chartR = useRef(null), macdR = useRef(null), rsiR = useRef(null);
   const lastScoreLog = useRef(0);
+  // alertas sonoros + tela sempre ligada
+  const audioR = useRef(null), zoneR = useRef(0), sigR = useRef("");
+  const [alerts, setAlerts] = useState(false);
+  const [wl, setWl] = useState(false);
+  const wlR = useRef(null);
+  const beep = (f = 880, d = .15, n = 1) => {
+    try {
+      const ctx = audioR.current || (audioR.current = new (window.AudioContext || window.webkitAudioContext)());
+      let t = ctx.currentTime;
+      for (let i = 0; i < n; i++) {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.frequency.value = f; o.connect(g); g.connect(ctx.destination);
+        g.gain.setValueAtTime(.15, t); g.gain.exponentialRampToValueAtTime(.001, t + d);
+        o.start(t); o.stop(t + d); t += d + .1;
+      }
+    } catch {}
+    if (navigator.vibrate) navigator.vibrate(Array(n).fill(120));
+  };
+  const toggleAlerts = () => { setAlerts(a => { ls.set("wdo_alerts", !a); if (!a) beep(880, .1, 1); return !a }) };
+  const toggleWl = async () => {
+    try {
+      if (wl) { await wlR.current?.release(); wlR.current = null; setWl(false) }
+      else { wlR.current = await navigator.wakeLock.request("screen"); setWl(true) }
+    } catch { alert("Manter tela ligada não é suportado neste navegador.") }
+  };
 
   /* ---------- boot ---------- */
   useEffect(() => {
     setCfg(ls.get("wdo_cfg", { cap: 20000, pct: 1, day: 3, mg: 150 }));
     const f = ls.get("wdo_fg", null);
-    if (f && f.d === new Date().toDateString()) setFg({ now: f.now, prev: f.prev });
+    if (f && f.d === brDay(Date.now())) setFg({ now: f.now, prev: f.prev });
     setPosition(ls.get("wdo_pos", null));
+    setAlerts(!!ls.get("wdo_alerts", false));
     fetch("/api/trades").then(r => r.json()).then(d => Array.isArray(d) && setJournal(d)).catch(() => {});
     const load = async (full) => {
       try {
@@ -131,10 +169,19 @@ export default function Terminal() {
   /* ---------- score history p/ backtesting ---------- */
   useEffect(() => {
     if (!cf || !live) return;
+    if (!isMarketOpen()) return; // fora do pregão, não grava histórico
     if (Date.now() - lastScoreLog.current > 5 * 60000) {
       lastScoreLog.current = Date.now();
       fetch("/api/scores", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ score: cf.score, price: live.bid }) }).catch(() => {});
     }
+  });
+
+  /* ---------- alertas ---------- */
+  useEffect(() => {
+    if (!cf || !alerts) return;
+    const z = cf.score >= 60 ? 1 : cf.score <= -60 ? -1 : 0;
+    if (z !== 0 && z !== zoneR.current) beep(z > 0 ? 880 : 440, .15, 2);
+    zoneR.current = z;
   });
 
   /* ---------- posição ---------- */
@@ -173,6 +220,12 @@ export default function Terminal() {
     }
     posView = { p, px, pts, r, trail, tgt, sigs };
   }
+  useEffect(() => {
+    if (!alerts) { sigR.current = ""; return }
+    const s = posView && posView.sigs[0][0] === "hot" ? posView.sigs[0][1] : "";
+    if (s && s !== sigR.current) beep(660, .2, 3);
+    sigR.current = s;
+  });
   const closePos = async () => {
     if (!posView) return;
     const { p, px, pts } = posView;
@@ -183,10 +236,13 @@ export default function Terminal() {
 
   /* ---------- diário (Supabase) ---------- */
   async function addTrade(t) {
-    const r = await fetch("/api/trades", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(t) });
-    const d = await r.json();
-    if (d && d.id) setJournal(j => [...j, d]);
-    else alert(d.error || "Configure o Supabase para salvar o diário na nuvem.");
+    setJSaving(true); setJMsg("⏳ Enviando para a nuvem…");
+    try {
+      const r = await fetch("/api/trades", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(t) });
+      const d = await r.json();
+      if (d && d.id) { setJournal(j => [...j, d]); flash("✅ Trade salvo na nuvem!"); setJSaving(false); return true }
+      flash("❌ " + (d.error || "Falha ao salvar — tente de novo")); setJSaving(false); return false;
+    } catch { flash("❌ Sem conexão — trade NÃO foi salvo"); setJSaving(false); return false }
   }
   const submitJ = async () => {
     const pin = +jf.entry, pout = +jf.exit, pstop = +jf.stop;
@@ -200,8 +256,19 @@ export default function Terminal() {
     await fetch(`/api/trades?id=${id}`, { method: "DELETE" });
     setJournal(j => j.filter(t => t.id !== id));
   };
-  const today = new Date().toDateString();
-  const dailyPnL = journal.filter(t => new Date(t.created_at).toDateString() === today).reduce((a, t) => a + +t.brl, 0);
+  const hoje = brDay(Date.now());
+  const dailyPnL = journal.filter(t => brDay(t.created_at) === hoje).reduce((a, t) => a + +t.brl, 0);
+  const rateTrade = t => {
+    const r = +t.r;
+    if (!t.stop || r === 0) return ["—", "neu"];
+    if (r >= 2) return ["🎯 ≥2R", "pos"];
+    if (r > 0) return ["✓ ganho", "pos"];
+    if (r >= -1.1) return ["stop ok", "neu"];
+    return ["⚠ estourou stop", "neg"];
+  };
+  const lossesWithStop = journal.filter(t => +t.brl < 0 && t.stop);
+  const disciplined = lossesWithStop.filter(t => +t.r >= -1.1).length;
+  const discipline = lossesWithStop.length ? disciplined / lossesWithStop.length : 1;
   const wins = journal.filter(t => +t.brl > 0), loss = journal.filter(t => +t.brl < 0);
   const wr = journal.length ? wins.length / journal.length : 0;
   const aw = wins.length ? wins.reduce((a, t) => a + +t.brl, 0) / wins.length : 0;
@@ -290,9 +357,11 @@ export default function Terminal() {
       </div>
       <div className="meta">
         <div>Máx {live ? fmt(live.high) : "—"} · Mín {live ? fmt(live.low) : "—"}</div>
-        <div>Atualizado {live ? new Date(live.ts).toLocaleTimeString("pt-BR") : "—"} · próximo em {cd}s</div>
+        <div>Atualizado {live ? new Date(live.ts).toLocaleTimeString("pt-BR", { timeZone: TZ }) : "—"} · próximo em {cd}s</div>
       </div>
       <div className="spacer" />
+      <button className="ghost" onClick={toggleAlerts}>{alerts ? "🔔 alertas ON" : "🔕 alertas off"}</button>
+      <button className="ghost" onClick={toggleWl}>{wl ? "☀ tela fixa ON" : "☾ tela fixa off"}</button>
       <span className={"pill " + (conn.includes("VIVO") ? "live" : "demo")}>{conn}</span>
     </header>
 
@@ -312,27 +381,31 @@ export default function Terminal() {
           <div className="jform">
             <div><label>Direção</label><select value={jf.dir} onChange={e => setJf({ ...jf, dir: e.target.value })}><option value="C">Compra</option><option value="V">Venda</option></select></div>
             <div><label>Contratos</label><input type="number" min="1" value={jf.qty} onChange={e => setJf({ ...jf, qty: e.target.value })} /></div>
-            <div><label>Entrada</label><input type="number" step="0.5" value={jf.entry} onChange={e => setJf({ ...jf, entry: e.target.value })} /></div>
-            <div><label>Stop</label><input type="number" step="0.5" value={jf.stop} onChange={e => setJf({ ...jf, stop: e.target.value })} /></div>
-            <div><label>Saída</label><input type="number" step="0.5" value={jf.exit} onChange={e => setJf({ ...jf, exit: e.target.value })} /></div>
+            <div><label>Entrada <a onClick={() => live && setJf({ ...jf, entry: roundTick(live.bid) })} style={{ color: "var(--amber)", cursor: "pointer" }}>⚡agora</a></label><input type="number" step="0.5" value={jf.entry} onChange={e => setJf({ ...jf, entry: e.target.value })} /></div>
+            <div><label>Stop <a onClick={() => { if (!re) return; const base = +jf.entry || (live && live.bid); if (!base) return; setJf({ ...jf, stop: roundTick(jf.dir === "C" ? base - re.stop : base + re.stop) }) }} style={{ color: "var(--amber)", cursor: "pointer" }}>⚡1,5×ATR</a></label><input type="number" step="0.5" value={jf.stop} onChange={e => setJf({ ...jf, stop: e.target.value })} /></div>
+            <div><label>Saída <a onClick={() => live && setJf({ ...jf, exit: roundTick(live.bid) })} style={{ color: "var(--amber)", cursor: "pointer" }}>⚡agora</a></label><input type="number" step="0.5" value={jf.exit} onChange={e => setJf({ ...jf, exit: e.target.value })} /></div>
             <div><label>Setup</label><input value={jf.setup} onChange={e => setJf({ ...jf, setup: e.target.value })} placeholder="ex.: pullback S1" /></div>
-            <button onClick={submitJ}>Registrar</button>
+            <button onClick={submitJ} disabled={jSaving}>{jSaving ? "⏳ Salvando…" : "Registrar"}</button>
           </div>
-          <table className="jtable"><thead><tr><th>Data</th><th>Dir</th><th>Qtd</th><th>Entrada</th><th>Saída</th><th>Pts</th><th>R$</th><th>R</th><th>Setup</th><th></th></tr></thead>
+          {jMsg && <div style={{ marginTop: 8, fontFamily: "var(--mono)", fontSize: 12, color: jMsg.startsWith("✅") ? "var(--up)" : jMsg.startsWith("❌") ? "var(--down)" : "var(--amber)" }}>{jMsg}</div>}
+          <table className="jtable"><thead><tr><th>Data</th><th>Dir</th><th>Qtd</th><th>Entrada</th><th>Saída</th><th>Pts</th><th>R$</th><th>R</th><th>Aval.</th><th>Setup</th><th></th></tr></thead>
             <tbody>{journal.slice(-12).reverse().map(t => (
               <tr key={t.id}>
-                <td>{new Date(t.created_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</td>
+                <td>{new Date(t.created_at).toLocaleString("pt-BR", { timeZone: TZ, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</td>
                 <td className={t.dir === "C" ? "pos" : "neg"}>{t.dir}</td><td>{t.qty}</td>
                 <td>{fmt(+t.entry)}</td><td>{fmt(+t.exit)}</td>
                 <td className={+t.pts >= 0 ? "pos" : "neg"}>{+t.pts > 0 ? "+" : ""}{fmt(+t.pts)}</td>
                 <td className={+t.brl >= 0 ? "pos" : "neg"}>{fmt$(+t.brl)}</td>
-                <td>{(+t.r).toFixed(2)}</td><td>{t.setup || ""}</td>
+                <td>{(+t.r).toFixed(2)}</td>
+                <td className={rateTrade(t)[1]}>{rateTrade(t)[0]}</td>
+                <td>{t.setup || ""}</td>
                 <td><button className="ghost" onClick={() => delTrade(t.id)}>×</button></td>
               </tr>))}</tbody></table>
           <div className="metrics">
             {[["Taxa de acerto", (wr * 100).toFixed(0) + "%", wr >= .4 ? "pos" : "neg"],
               ["Payoff", al ? (aw / al).toFixed(2) : "—", aw / al >= 1.5 ? "pos" : "amb"],
               ["Expectância/trade", fmt$(wr * aw - (1 - wr) * al), wr * aw - (1 - wr) * al >= 0 ? "pos" : "neg"],
+              ["Disciplina de stop", (discipline * 100).toFixed(0) + "%", discipline >= .8 ? "pos" : "neg"],
               ["Hoje", fmt$(dailyPnL), dailyPnL >= 0 ? "pos" : "neg"],
               ["Acumulado", fmt$(journal.reduce((a, t) => a + +t.brl, 0)), journal.reduce((a, t) => a + +t.brl, 0) >= 0 ? "pos" : "neg"]
             ].map(([l, v, c]) => <div className="metric" key={l}><div className={"v " + c}>{v}</div><div className="l">{l}</div></div>)}
@@ -421,8 +494,8 @@ export default function Terminal() {
         <section className="panel">
           <h2>Players — dólar futuro <span className="tag">B3, D+1</span></h2>
           <div className="inputs">
-            <div><label>Estrangeiro líq. hoje (contratos)</label><input type="number" value={fg.now} onChange={e => { const f = { ...fg, now: e.target.value }; setFg(f); ls.set("wdo_fg", { ...f, d: new Date().toDateString() }) }} placeholder="ex.: -45000" /></div>
-            <div><label>Estrangeiro líq. ontem</label><input type="number" value={fg.prev} onChange={e => { const f = { ...fg, prev: e.target.value }; setFg(f); ls.set("wdo_fg", { ...f, d: new Date().toDateString() }) }} placeholder="ex.: -52000" /></div>
+            <div><label>Estrangeiro líq. hoje (contratos)</label><input type="number" value={fg.now} onChange={e => { const f = { ...fg, now: e.target.value }; setFg(f); ls.set("wdo_fg", { ...f, d: brDay(Date.now()) }) }} placeholder="ex.: -45000" /></div>
+            <div><label>Estrangeiro líq. ontem</label><input type="number" value={fg.prev} onChange={e => { const f = { ...fg, prev: e.target.value }; setFg(f); ls.set("wdo_fg", { ...f, d: brDay(Date.now()) }) }} placeholder="ex.: -52000" /></div>
           </div>
           <div className="kv" style={{ marginTop: 8 }}>
             <div className="row"><span>Leitura</span><span className={pa.adj > 0 ? "pos" : pa.adj < 0 ? "neg" : "neu"}>{pa.txt}</span></div>
