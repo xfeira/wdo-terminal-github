@@ -360,6 +360,7 @@ export default function Terminal() {
         <div>Atualizado {live ? new Date(live.ts).toLocaleTimeString("pt-BR", { timeZone: TZ }) : "—"} · próximo em {cd}s</div>
       </div>
       <div className="spacer" />
+      <a href="/performance" className="ghost" style={{ textDecoration: "none", background: "transparent", border: "1px solid var(--line)", color: "var(--dim)", padding: "4px 8px", fontSize: 10, borderRadius: 4, fontFamily: "var(--mono)" }}>📊 performance</a>
       <button className="ghost" onClick={toggleAlerts}>{alerts ? "🔔 alertas ON" : "🔕 alertas off"}</button>
       <button className="ghost" onClick={toggleWl}>{wl ? "☀ tela fixa ON" : "☾ tela fixa off"}</button>
       <span className={"pill " + (conn.includes("VIVO") ? "live" : "demo")}>{conn}</span>
