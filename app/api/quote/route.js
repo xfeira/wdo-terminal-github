@@ -23,4 +23,25 @@ async function yahoo() {
   return { bid, high: (highs.length ? Math.max(...highs) : bid / 1000) * 1000, low: (lows.length ? Math.min(...lows) : bid / 1000) * 1000, pct: prev ? (bid - prev) / prev * 100 : 0, ts: Date.now(), src: "yahoo" };
 }
 
-as
+async function cmeFuture() {
+  const r = await fetch("https://query1.finance.yahoo.com/v8/finance/chart/6L=F?interval=1m&range=1d", OPT);
+  const m = (await r.json()).chart?.result?.[0]?.meta;
+  if (!m?.regularMarketPrice) throw new Error("6L sem dados");
+  return 1000 / m.regularMarketPrice; // USD por BRL -> pontos de WDO
+}
+
+export async function GET() {
+  let base;
+  try { base = await awesome() }
+  catch (e1) {
+    try { base = await yahoo() }
+    catch (e2) { return Response.json({ error: `${e1.message} | ${e2.message}` }, { status: 502 }) }
+  }
+  // deslocamento automático via futuro do CME (gêmeo de arbitragem do WDO)
+  try {
+    const f = await cmeFuture();
+    const off = f - base.bid;
+    if (isFinite(off) && Math.abs(off) < 120) { base.future = +f.toFixed(1); base.off = +off.toFixed(1) }
+  } catch {}
+  return Response.json(base);
+}
