@@ -1,0 +1,21 @@
+name: Coleta WDO
+on:
+  schedule:
+    # A cada 5 min, seg-sex, 11:55-21:30 UTC (~8:55-18:30 Brasília, cobre horário de verão americano)
+    - cron: "*/5 12-21 * * 1-5"
+    # Análise macro IA: 3x/dia (9h05, 13h05, 16h35 Brasília aprox.)
+    - cron: "5 12 * * 1-5"
+    - cron: "5 16 * * 1-5"
+    - cron: "35 19 * * 1-5"
+  workflow_dispatch: {}
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar endpoint de coleta
+        run: |
+          MACRO=""
+          H=$(date -u +%H%M)
+          if [ "$H" = "1205" ] || [ "$H" = "1605" ] || [ "$H" = "1935" ]; then MACRO="&macro=1"; fi
+          curl -sS --max-time 120 --retry 3 --retry-delay 20 \
+            "https://wdo-terminal-github.onrender.com/api/collect?key=${{ secrets.COLLECT_KEY }}${MACRO}" || true
