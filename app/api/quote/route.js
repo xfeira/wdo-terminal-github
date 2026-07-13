@@ -23,10 +23,4 @@ async function yahoo() {
   return { bid, high: (highs.length ? Math.max(...highs) : bid / 1000) * 1000, low: (lows.length ? Math.min(...lows) : bid / 1000) * 1000, pct: prev ? (bid - prev) / prev * 100 : 0, ts: Date.now(), src: "yahoo" };
 }
 
-export async function GET() {
-  try { return Response.json(await awesome()) }
-  catch (e1) {
-    try { return Response.json(await yahoo()) }
-    catch (e2) { return Response.json({ error: `${e1.message} | ${e2.message}` }, { status: 502 }) }
-  }
-}
+as
