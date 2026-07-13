@@ -43,6 +43,7 @@ export default function Terminal() {
   // alertas sonoros + tela sempre ligada
   const audioR = useRef(null), zoneR = useRef(0), sigR = useRef("");
   const [alerts, setAlerts] = useState(false);
+  const [scale, setScale] = useState("wdo"); // "wdo" = escala do contrato real (Clear) | "spot" = dólar à vista
   const [wl, setWl] = useState(false);
   const wlR = useRef(null);
   const beep = (f = 880, d = .15, n = 1) => {
@@ -73,6 +74,7 @@ export default function Terminal() {
     if (f && f.d === brDay(Date.now())) setFg({ now: f.now, prev: f.prev });
     setPosition(ls.get("wdo_pos", null));
     setAlerts(!!ls.get("wdo_alerts", false));
+    const sc = ls.get("wdo_scale", null); if (sc) setScale(sc);
     fetch("/api/trades").then(r => r.json()).then(d => Array.isArray(d) && setJournal(d)).catch(() => {});
     const load = async (full) => {
       try {
@@ -101,7 +103,11 @@ export default function Terminal() {
   }, []);
 
   /* ---------- engine ---------- */
-  const candles = candlesR.current, live = liveR.current, prevDay = prevDayR.current;
+  const liveRaw = liveR.current;
+  const off = scale === "wdo" && liveRaw?.off ? liveRaw.off : 0;
+  const candles = candlesR.current.map(x => ({ t: x.t, o: x.o + off, h: x.h + off, l: x.l + off, c: x.c + off }));
+  const live = liveRaw ? { ...liveRaw, bid: liveRaw.bid + off, high: liveRaw.high + off, low: liveRaw.low + off } : null;
+  const prevDay = prevDayR.current ? { h: prevDayR.current.h + off, l: prevDayR.current.l + off, c: prevDayR.current.c + off } : null;
   const ready = candles.length >= 5;
   let ind = null, cf = null, re = null, lvls = [];
   if (ready) {
@@ -172,7 +178,7 @@ export default function Terminal() {
     if (!isMarketOpen()) return; // fora do pregão, não grava histórico
     if (Date.now() - lastScoreLog.current > 5 * 60000) {
       lastScoreLog.current = Date.now();
-      fetch("/api/scores", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ score: cf.score, price: live.bid }) }).catch(() => {});
+      fetch("/api/scores", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ score: cf.score, price: liveR.current.bid }) }).catch(() => {});
     }
   });
 
@@ -360,6 +366,9 @@ export default function Terminal() {
         <div>Atualizado {live ? new Date(live.ts).toLocaleTimeString("pt-BR", { timeZone: TZ }) : "—"} · próximo em {cd}s</div>
       </div>
       <div className="spacer" />
+      <button className="ghost" onClick={() => setScale(s => { const n = s === "wdo" ? "spot" : "wdo"; ls.set("wdo_scale", n); return n })}>
+        {scale === "wdo" ? (liveRaw?.off != null ? `WDO real · ajuste ${liveRaw.off > 0 ? "+" : ""}${liveRaw.off.toFixed(1)} auto` : "WDO real · aguardando CME") : "dólar à vista"}
+      </button>
       <a href="/performance" className="ghost" style={{ textDecoration: "none", background: "transparent", border: "1px solid var(--line)", color: "var(--dim)", padding: "4px 8px", fontSize: 10, borderRadius: 4, fontFamily: "var(--mono)" }}>📊 performance</a>
       <button className="ghost" onClick={toggleAlerts}>{alerts ? "🔔 alertas ON" : "🔕 alertas off"}</button>
       <button className="ghost" onClick={toggleWl}>{wl ? "☀ tela fixa ON" : "☾ tela fixa off"}</button>
