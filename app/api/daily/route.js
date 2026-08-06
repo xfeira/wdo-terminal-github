@@ -6,7 +6,7 @@ async function awesome() {
   if (!r.ok) throw new Error("awesomeapi " + r.status);
   const j = await r.json();
   const p = j[1] || j[0];
-  if (!p || !p.high) throw new Error("awesomeapi sem dados");
+  if (!(+p?.high > 1000 && +p?.low > 1000 && +p?.bid > 1000)) throw new Error("awesomeapi dia anterior incompleto");
   return { h: +p.high * 1000, l: +p.low * 1000, c: +p.bid * 1000 };
 }
 
