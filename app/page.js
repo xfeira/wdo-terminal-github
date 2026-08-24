@@ -369,6 +369,7 @@ export default function Terminal() {
       <button className="ghost" onClick={() => setScale(s => { const n = s === "wdo" ? "spot" : "wdo"; ls.set("wdo_scale", n); return n })}>
         {scale === "wdo" ? (liveRaw?.off != null ? `WDO real · ajuste ${liveRaw.off > 0 ? "+" : ""}${liveRaw.off.toFixed(1)} auto` : "WDO real · aguardando CME") : "dólar à vista"}
       </button>
+      <a href="/lab" className="ghost" style={{ textDecoration: "none", background: "transparent", border: "1px solid var(--line)", color: "var(--dim)", padding: "4px 8px", fontSize: 10, borderRadius: 4, fontFamily: "var(--mono)" }}>🔬 laboratório</a>
       <a href="/performance" className="ghost" style={{ textDecoration: "none", background: "transparent", border: "1px solid var(--line)", color: "var(--dim)", padding: "4px 8px", fontSize: 10, borderRadius: 4, fontFamily: "var(--mono)" }}>📊 performance</a>
       <button className="ghost" onClick={toggleAlerts}>{alerts ? "🔔 alertas ON" : "🔕 alertas off"}</button>
       <button className="ghost" onClick={toggleWl}>{wl ? "☀ tela fixa ON" : "☾ tela fixa off"}</button>
